@@ -14,6 +14,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.OpenableColumns
 import android.widget.Button
+import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -31,7 +32,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var txtDevice: TextView
     private lateinit var txtIterations: TextView
     private lateinit var txtStatus: TextView
+    private lateinit var txtProgress: TextView
     private lateinit var txtLog: TextView
+    private lateinit var progressDfu: ProgressBar
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var selectedZipUri: Uri? = null
@@ -74,6 +77,7 @@ class MainActivity : AppCompatActivity() {
         override fun onDfuProcessStarting(deviceAddress: String) {
             isDfuInProgress = true
             txtStatus.text = "Status: DFU starting"
+            updateProgress(0)
             appendLog("DFU starting on $deviceAddress")
         }
 
@@ -81,11 +85,24 @@ class MainActivity : AppCompatActivity() {
             txtStatus.text = "Status: connecting"
         }
 
+        override fun onProgressChanged(
+            deviceAddress: String,
+            percent: Int,
+            speed: Float,
+            avgSpeed: Float,
+            currentPart: Int,
+            partsTotal: Int
+        ) {
+            txtStatus.text = "Status: uploading (part $currentPart/$partsTotal)"
+            updateProgress(percent)
+        }
+
         override fun onDfuCompleted(deviceAddress: String) {
             isDfuInProgress = false
             successfulIterations += 1
             txtIterations.text = "Successful iterations: $successfulIterations"
             txtStatus.text = "Status: DFU completed"
+            updateProgress(100)
             appendLog("DFU completed on $deviceAddress (success #$successfulIterations)")
             scheduleScanRestart(2000)
         }
@@ -93,6 +110,7 @@ class MainActivity : AppCompatActivity() {
         override fun onDfuAborted(deviceAddress: String) {
             isDfuInProgress = false
             txtStatus.text = "Status: DFU aborted"
+            updateProgress(0)
             appendLog("DFU aborted on $deviceAddress")
             scheduleScanRestart(2000)
         }
@@ -105,6 +123,7 @@ class MainActivity : AppCompatActivity() {
         ) {
             isDfuInProgress = false
             txtStatus.text = "Status: DFU error"
+            updateProgress(0)
             appendLog("DFU error on $deviceAddress: $message")
             scheduleScanRestart(4000)
         }
@@ -118,7 +137,9 @@ class MainActivity : AppCompatActivity() {
         txtDevice = findViewById(R.id.txtDevice)
         txtIterations = findViewById(R.id.txtIterations)
         txtStatus = findViewById(R.id.txtStatus)
+        txtProgress = findViewById(R.id.txtProgress)
         txtLog = findViewById(R.id.txtLog)
+        progressDfu = findViewById(R.id.progressDfu)
 
         findViewById<Button>(R.id.btnPickZip).setOnClickListener {
             zipPickerLauncher.launch(arrayOf("application/zip", "application/octet-stream"))
@@ -183,6 +204,7 @@ class MainActivity : AppCompatActivity() {
         txtIterations.text = "Successful iterations: 0"
         isLoopRunning = true
         txtStatus.text = "Status: loop running"
+        updateProgress(0)
         appendLog("Loop started")
         scheduleScanRestart(200)
     }
@@ -192,6 +214,7 @@ class MainActivity : AppCompatActivity() {
         isDfuInProgress = false
         stopTargetScan()
         txtStatus.text = "Status: stopped"
+        updateProgress(0)
         appendLog("Loop stopped")
     }
 
@@ -376,6 +399,12 @@ class MainActivity : AppCompatActivity() {
     private fun appendLog(text: String) {
         val timestamp = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
         txtLog.append("[$timestamp] $text\n")
+    }
+
+    private fun updateProgress(percent: Int) {
+        val clamped = percent.coerceIn(0, 100)
+        progressDfu.progress = clamped
+        txtProgress.text = "Upload progress: $clamped%"
     }
 
     private fun safeDeviceName(result: ScanResult): String? {
