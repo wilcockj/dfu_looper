@@ -286,6 +286,7 @@ class MainActivity : AppCompatActivity() {
         txtStatus.text = "Status: launching DFU"
 
         try {
+            DfuServiceInitiator.createDfuNotificationChannel(this)
             DfuServiceInitiator(currentAddress)
                 .setDeviceName(currentName)
                 .setKeepBond(true)
