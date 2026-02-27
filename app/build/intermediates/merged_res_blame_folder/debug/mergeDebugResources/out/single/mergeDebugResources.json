@@ -1,0 +1,10 @@
+[
+    {
+        "merged": "com.example.nordicdfulooper.app-debug-37:/layout_activity_main.xml.flat",
+        "source": "com.example.nordicdfulooper.app-main-39:/layout/activity_main.xml"
+    },
+    {
+        "merged": "com.example.nordicdfulooper.app-debug-37:/layout_activity_device_scan.xml.flat",
+        "source": "com.example.nordicdfulooper.app-main-39:/layout/activity_device_scan.xml"
+    }
+]
