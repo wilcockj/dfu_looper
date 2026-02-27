@@ -19,7 +19,11 @@ class StableDfuDeviceSelector(
         if (address.equals(this.originalAddress, ignoreCase = true)) return true
         if (address.equals(incrementedAddress, ignoreCase = true)) return true
 
-        val name = device.name
+        val name = try {
+            device.name
+        } catch (_: SecurityException) {
+            null
+        }
         if (!originalName.isNullOrBlank() && !name.isNullOrBlank()) {
             if (name.equals(originalName, ignoreCase = true)) return true
             if (name.contains(originalName, ignoreCase = true) && name.contains("dfu", ignoreCase = true)) {

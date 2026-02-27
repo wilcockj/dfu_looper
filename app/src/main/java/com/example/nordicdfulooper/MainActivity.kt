@@ -238,7 +238,7 @@ class MainActivity : AppCompatActivity() {
         scanCallback = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 val address = result.device.address ?: return
-                val name = result.device.name
+                val name = safeDeviceName(result)
                 if (matchesSelectedDevice(address, name)) {
                     stopTargetScan()
                     appendLog("Target found: ${name ?: "Unknown"} ($address)")
@@ -253,7 +253,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        scanner.startScan(scanCallback)
+        try {
+            scanner.startScan(scanCallback)
+        } catch (e: SecurityException) {
+            stopTargetScan()
+            appendLog("Scan permission error: ${e.message ?: "security exception"}")
+            scheduleScanRestart(4000)
+            return
+        }
         mainHandler.postDelayed({
             if (scanCallback != null) {
                 stopTargetScan()
@@ -278,18 +285,26 @@ class MainActivity : AppCompatActivity() {
         isDfuInProgress = true
         txtStatus.text = "Status: launching DFU"
 
-        DfuServiceInitiator(currentAddress)
-            .setDeviceName(currentName)
-            .setKeepBond(true)
-            .setForceDfu(true)
-            .setUnsafeExperimentalButtonlessServiceInSecureDfuEnabled(true)
-            .setPacketsReceiptNotificationsEnabled(false)
-            .setMtu(247)
-            .setZip(zipUri)
-            .also {
-                DfuService.setTarget(selectedAddress, selectedDeviceName)
-                it.start(this, DfuService::class.java)
-            }
+        try {
+            DfuServiceInitiator(currentAddress)
+                .setDeviceName(currentName)
+                .setKeepBond(true)
+                .setForceDfu(true)
+                .setUnsafeExperimentalButtonlessServiceInSecureDfuEnabled(true)
+                .setPacketsReceiptNotificationsEnabled(false)
+                .setMtu(247)
+                .setZip(zipUri)
+                .also {
+                    DfuService.setTarget(selectedAddress, selectedDeviceName)
+                    it.start(this, DfuService::class.java)
+                }
+        } catch (e: Exception) {
+            isDfuInProgress = false
+            txtStatus.text = "Status: DFU launch failed"
+            appendLog("Failed to start DFU: ${e.message ?: e.javaClass.simpleName}")
+            scheduleScanRestart(4000)
+            return
+        }
 
         appendLog("Started DFU using ${resolveName(zipUri)}")
     }
@@ -360,5 +375,13 @@ class MainActivity : AppCompatActivity() {
     private fun appendLog(text: String) {
         val timestamp = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
         txtLog.append("[$timestamp] $text\n")
+    }
+
+    private fun safeDeviceName(result: ScanResult): String? {
+        return try {
+            result.device.name
+        } catch (_: SecurityException) {
+            null
+        }
     }
 }
