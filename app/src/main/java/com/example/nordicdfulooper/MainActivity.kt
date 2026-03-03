@@ -19,9 +19,11 @@ import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import no.nordicsemi.android.dfu.DfuLogListener
 import no.nordicsemi.android.dfu.DfuProgressListenerAdapter
 import no.nordicsemi.android.dfu.DfuServiceInitiator
 import no.nordicsemi.android.dfu.DfuServiceListenerHelper
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -44,6 +46,8 @@ class MainActivity : AppCompatActivity() {
     private var isLoopRunning = false
     private var isDfuInProgress = false
     private var scanCallback: ScanCallback? = null
+    private lateinit var logFile: File
+    private var packetRetryCount = 0
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -129,6 +133,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val dfuLogListener = DfuLogListener { deviceAddress, level, message ->
+        appendLog("DFU log [$level] $deviceAddress: $message")
+        val lower = message.lowercase(Locale.US)
+        if (lower.contains("retry") && (lower.contains("packet") || lower.contains("prn"))) {
+            packetRetryCount += 1
+            appendLog("Packet retry detected (#$packetRetryCount): $message")
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -140,6 +153,8 @@ class MainActivity : AppCompatActivity() {
         txtProgress = findViewById(R.id.txtProgress)
         txtLog = findViewById(R.id.txtLog)
         progressDfu = findViewById(R.id.progressDfu)
+        logFile = File(filesDir, "dfu_log.txt")
+        appendLog("File logging enabled: ${logFile.absolutePath}")
 
         findViewById<Button>(R.id.btnPickZip).setOnClickListener {
             zipPickerLauncher.launch(arrayOf("application/zip", "application/octet-stream"))
@@ -170,9 +185,11 @@ class MainActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         DfuServiceListenerHelper.registerProgressListener(this, dfuProgressListener)
+        DfuServiceListenerHelper.registerLogListener(this, dfuLogListener)
     }
 
     override fun onStop() {
+        DfuServiceListenerHelper.unregisterLogListener(this, dfuLogListener)
         DfuServiceListenerHelper.unregisterProgressListener(this, dfuProgressListener)
         stopTargetScan()
         super.onStop()
@@ -201,6 +218,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         successfulIterations = 0
+        packetRetryCount = 0
         txtIterations.text = "Successful iterations: 0"
         isLoopRunning = true
         txtStatus.text = "Status: loop running"
@@ -398,7 +416,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun appendLog(text: String) {
         val timestamp = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
-        txtLog.append("[$timestamp] $text\n")
+        val line = "[$timestamp] $text"
+        txtLog.append("$line\n")
+        try {
+            logFile.appendText("$line\n")
+        } catch (_: Exception) {
+            // Do not fail DFU flow because file logging failed.
+        }
     }
 
     private fun updateProgress(percent: Int) {
